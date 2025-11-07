@@ -10,40 +10,15 @@
 //!
 //! Types of events that the window should handle
 //!
+use anyhow::{Ok, Result};
+use winit::{
+    dpi::PhysicalSize,
+    event,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::{Fullscreen, Window as WinWindow},
+};
 
 use super::errors::WindowError;
-
-#[derive(Clone, Debug)]
-pub enum WindowEvent {
-    Resized(u32, u32),
-    Closed,
-    KeyPressed(Key),
-    KeyReleased(Key),
-    MouseMoved(f64, f64),
-    MouseButtonPressed(MouseButton),
-}
-
-// Keys that can be pressed on the window
-//
-#[derive(Debug, Clone, Copy)]
-pub enum Key {
-    A,
-    B,
-    C,
-    D,
-    E,
-    Escape,
-    Return,
-    Space,
-}
-
-// Mouse buttons that can be pressed
-#[derive(Debug, Clone)]
-pub enum MouseButton {
-    Left,
-    Right,
-    Middle,
-}
 
 // Window Configuration builder
 #[derive(Debug, Clone)]
@@ -56,54 +31,53 @@ pub struct WindowConfig {
     pub fullscreen: bool,
 }
 
-impl WindowConfig {
-    pub fn new(title: impl Into<String>, width: u32, height: u32) -> Self {
-        WindowConfig {
-            title: title.into(),
-            width,
-            height,
-            resizable: true,
-            vsync: true,
-            fullscreen: false,
-        }
-    }
+// Main window struct
+//
+pub struct Window {
+    // internal type that is hidden outsiders
+    pub(crate) inner: WinWindow,
 
-    pub fn resizable(mut self, resizable: bool) -> Self {
-        self.resizable = resizable;
-        self
-    }
-
-    pub fn vsync(mut self, vsync: bool) -> Self {
-        self.vsync = vsync;
-        self
-    }
+    // Public API
+    height: u32,
+    width: u32,
+    title: String,
+    fullscreen: bool,
+    resizable: bool,
+    vsync: bool,
 }
 
-// Main window trait
-pub trait Window {
-    fn create(config: WindowConfig) -> anyhow::Result<Self>
+impl Window {
+    pub fn create(config: WindowConfig, event_loop: ActiveEventLoop) -> anyhow::Result<Self>
     where
-        Self: Sized;
+        Self: Sized,
+    {
+        let win_attributes = WinWindow::default_attributes()
+            .with_title(config.title.as_str())
+            .with_inner_size(PhysicalSize::new(config.width, config.height));
+        let window = event_loop.create_window(win_attributes)?;
 
-    fn poll_events(&mut self) -> Vec<WindowEvent>;
+        Ok(Self {
+            inner: window,
+            height: config.height,
+            width: config.width,
+            title: config.title,
+            fullscreen: config.fullscreen,
+            vsync: config.vsync,
+            resizable: config.resizable,
+        })
+    }
 
-    fn set_title(&mut self, title: &str);
-    fn get_title(&self) -> &str;
+    pub fn set_title(&mut self, title: String) {
+        self.title = title
+    }
 
-    fn set_size(&mut self, width: u32, height: u32);
-    fn get_size(&self) -> (u32, u32);
-
-    fn set_position(&mut self, x: i32, y: i32);
-    fn get_position(&self) -> (i32, i32);
-
-    fn set_fullscreen(&mut self, fullscreen: bool);
-    fn is_fullscreen(&self) -> bool;
-
-    fn set_visible(&mut self, visible: bool);
-    fn is_visible(&self) -> bool;
-
-    fn is_open(&self) -> bool;
-    fn close(&mut self);
-
-    fn request_redraw(&mut self);
+    pub fn set_fullscreen(&mut self, status: bool) {
+        self.fullscreen = status;
+        if status {
+            self.inner
+                .set_fullscreen(Some(Fullscreen::Borderless(None)))
+        } else {
+            todo!("to be investigated further, it is not yet clear from the docs how to do this.")
+        }
+    }
 }
