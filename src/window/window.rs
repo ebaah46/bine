@@ -2,9 +2,8 @@
 //!
 //! Author: BEKs => 03.11.2025
 //!
-//! Current abstraction will be tied to the winit API.
-//! This is to be abstracted in the future when other windowing
-//! systems will be supported.
+//! Current windowing system of this engine is coupled with the winit system
+//! for simplicity
 
 //! Common types
 //!
