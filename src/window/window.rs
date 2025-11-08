@@ -30,6 +30,19 @@ pub struct WindowConfig {
     pub fullscreen: bool,
 }
 
+impl WindowConfig {
+    pub fn new(title: &str, width: u32, height: u32, resizable: bool) -> Self {
+        WindowConfig {
+            title: title.into(),
+            width: width,
+            height: height,
+            resizable: resizable,
+            vsync: false,
+            fullscreen: false,
+        }
+    }
+}
+
 // Main window struct
 //
 pub struct Window {
@@ -46,7 +59,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn create(config: WindowConfig, event_loop: ActiveEventLoop) -> anyhow::Result<Self>
+    pub fn create(config: WindowConfig, event_loop: &ActiveEventLoop) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -79,4 +92,14 @@ impl Window {
             todo!("to be investigated further, it is not yet clear from the docs how to do this.")
         }
     }
+
+    pub(crate) fn inner(&self) -> &WinWindow {
+        &self.inner
+    }
+
+    pub fn request_redraw(&self) {
+        self.inner.request_redraw();
+    }
+
+    // Key event handlers component is next
 }

@@ -2,4 +2,4 @@
 //!
 //! Author: BEKs => 04.11.2025
 //!
-mod window;
+pub mod window;
