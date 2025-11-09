@@ -16,7 +16,7 @@ struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let config = WindowConfig::new("Demo App", 860, 600, true);
+            let config = WindowConfig::new("Demo App", 1980, 1600, true);
             match Window::create(config, event_loop) {
                 Ok(window) => {
                     println!("Window created successfully!");
@@ -87,5 +87,5 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
 
     let mut app = App::default();
-    event_loop.run_app(&mut app);
+    let _ = event_loop.run_app(&mut app);
 }
