@@ -160,6 +160,7 @@ impl Renderer {
 
 // === Enumeration for different backends to use
 // this is used during renderer instantiation
+#[derive(Debug, Clone)]
 pub enum RendererBackends {
     OpenGL,
     Metal,
