@@ -9,11 +9,10 @@
 //!
 //! Types of events that the window should handle
 //!
-use anyhow::{Ok, Result};
+use anyhow::Ok;
 use winit::{
     dpi::PhysicalSize,
-    event,
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::ActiveEventLoop,
     window::{Fullscreen, Window as WinWindow},
 };
 
@@ -45,6 +44,7 @@ impl WindowConfig {
 
 // Main window struct
 //
+#[derive(Debug)]
 pub struct Window {
     // internal type that is hidden outsiders
     pub(crate) inner: WinWindow,
