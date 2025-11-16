@@ -18,7 +18,7 @@ use super::super::{
     window::{Window, WindowConfig},
 };
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // === Engine struct
 //
@@ -45,6 +45,9 @@ pub struct Engine {
 // game engine.
 //
 impl Engine {
+    const FRAME_TIME_CAP: f32 = 0.25; //
+    const TIME_STEP: f32 = 1.0 / 60.0; // how often should I update game logic
+
     pub fn new(title: &str, width: u32, height: u32, backend: RendererBackends) -> Self {
         Self {
             window: None,
@@ -58,13 +61,40 @@ impl Engine {
         }
     }
 
-    fn run_game_loop(&mut self) {}
+    fn run_game_loop(&mut self) {
+        // calculate dt
+        //
+        let dt = Instant::now();
+        let frame_time = if let Some(last_update) = self.last_update {
+            (dt - last_update).as_secs_f32().min(Self::FRAME_TIME_CAP)
+        } else {
+            0.0
+        };
+        self.accumulator += frame_time;
+
+        // update game logic since last update
+        let mut iterations = 0;
+        while self.accumulator >= Self::TIME_STEP {
+            self.update(Self::TIME_STEP);
+            self.accumulator -= Self::TIME_STEP;
+
+            iterations += 1;
+            if iterations > 10 {
+                self.accumulator = 0.0;
+                break;
+            }
+        }
+
+        self.render();
+
+        self.last_update = Some(dt);
+    }
 
     // update game logic and time changes
-    fn update() {}
+    fn update(&mut self, delta_time: f32) {}
 
     // render UI and other sprites in game
-    fn render() {}
+    fn render(&mut self) {}
 
     // handle window resizing changes using window module
 
