@@ -155,7 +155,6 @@ impl ApplicationHandler for Engine {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                println!("The close button was pressed; stopping");
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
