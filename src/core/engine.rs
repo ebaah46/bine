@@ -5,6 +5,7 @@
 //! This module orchestrates and manages all other components
 //! and their interaction
 use pollster;
+use wgpu::Color;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -62,8 +63,7 @@ impl Engine {
     }
 
     fn run_game_loop(&mut self) {
-        // calculate dt
-        //
+        // calculate delta time as time since last frame processing began
         let dt = Instant::now();
         let frame_time = if let Some(last_update) = self.last_update {
             (dt - last_update).as_secs_f32().min(Self::FRAME_TIME_CAP)
@@ -94,7 +94,10 @@ impl Engine {
     fn update(&mut self, delta_time: f32) {}
 
     // render UI and other sprites in game
-    fn render(&mut self) {}
+    fn render(&mut self) {
+        let renderer = self.renderer.as_mut().unwrap();
+        renderer.clear(120.0, 250.0, 88.0);
+    }
 
     // handle window resizing changes using window module
 
@@ -167,6 +170,15 @@ impl ApplicationHandler for Engine {
                 self.run_game_loop();
 
                 self.window.as_ref().unwrap().request_redraw();
+            }
+
+            WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => {
+                if let Some(_) = self.renderer.as_ref() {
+                    dbg!(position);
+                };
             }
             _ => (),
         }

@@ -108,7 +108,7 @@ impl Renderer {
 
     // Clearing the surface
     // Basic necessity for rendering
-    pub fn clear(&self, r: f32, g: f32, b: f32) {
+    pub fn clear(&self, r: f64, g: f64, b: f64) {
         let frame = self
             .surface
             .get_current_texture()
@@ -129,10 +129,10 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
+                            r: r,
+                            g: g,
+                            b: b,
+                            a: 0.5,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
