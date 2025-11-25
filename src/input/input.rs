@@ -6,7 +6,7 @@
 //! and their API
 
 use winit::{
-    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton},
     keyboard::{KeyCode, PhysicalKey},
 };
 

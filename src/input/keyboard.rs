@@ -5,10 +5,7 @@
 //! Handles all that has to do with Keyboard
 use std::collections::HashSet;
 
-use winit::{
-    event::ElementState,
-    keyboard::{KeyCode, PhysicalKey},
-};
+use winit::{event::ElementState, keyboard::KeyCode};
 
 pub struct Keyboard {
     pressed_keys: HashSet<KeyCode>,
