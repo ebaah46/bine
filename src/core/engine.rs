@@ -5,21 +5,22 @@
 //! This module orchestrates and manages all other components
 //! and their interaction
 use pollster;
-use wgpu::Color;
+
 use winit::{
     application::ApplicationHandler,
-    event::{ElementState, KeyEvent, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{Key, NamedKey},
+    event::{MouseScrollDelta, WindowEvent},
+    event_loop::ActiveEventLoop,
     window::WindowId,
 };
+
+use crate::input::Input;
 
 use super::super::{
     renderer::{Renderer, RendererBackends},
     window::{Window, WindowConfig},
 };
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 // === Engine struct
 //
@@ -35,6 +36,9 @@ pub struct Engine {
 
     // renderer specific config
     backend: RendererBackends,
+
+    // input device
+    input: Input,
 
     // timing details
     last_update: Option<Instant>,
@@ -59,6 +63,7 @@ impl Engine {
             last_update: None,
             accumulator: 0.0,
             backend: backend,
+            input: Input::new(),
         }
     }
 
@@ -88,6 +93,8 @@ impl Engine {
         self.render();
 
         self.last_update = Some(dt);
+
+        self.input.update();
     }
 
     // update game logic and time changes
@@ -152,33 +159,30 @@ impl ApplicationHandler for Engine {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        logical_key: key,
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => match key {
-                Key::Named(NamedKey::Escape) => {
-                    println!("Escape key pressed, closing...");
-                    event_loop.exit()
-                }
-                _ => (),
-            },
+                event: key_event, ..
+            } => self.input.handle_keyboard_event(&key_event),
+
             WindowEvent::RedrawRequested => {
                 self.run_game_loop();
 
                 self.window.as_ref().unwrap().request_redraw();
             }
 
-            WindowEvent::CursorMoved {
-                device_id,
-                position,
-            } => {
-                if let Some(_) = self.renderer.as_ref() {
-                    dbg!(position);
+            WindowEvent::CursorMoved { position, .. } => {
+                self.input.handle_cursor_moved_event(position.x, position.y)
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let d = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 100.0,
+                    _ => 0.0,
                 };
+                self.input.handle_mouse_wheel_event(d as f64)
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.input.handle_mouse_button_event(button, state);
             }
             _ => (),
         }
