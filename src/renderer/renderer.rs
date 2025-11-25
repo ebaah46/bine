@@ -94,6 +94,8 @@ impl Renderer {
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
+
+        surface.configure(&device, &config);
         Ok(Self {
             surface: surface,
             instance: instance,
