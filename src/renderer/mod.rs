@@ -1,7 +1,10 @@
+pub mod camera;
 pub mod renderer;
 pub mod texture;
 pub mod vertex;
 
+pub use camera::Camera;
+pub use camera::CameraUniform;
 pub use renderer::Renderer;
 pub use renderer::RendererBackends;
 pub use texture::Texture;

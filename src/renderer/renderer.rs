@@ -8,6 +8,7 @@ use std::vec;
 
 use anyhow::{Context, Result};
 
+use cgmath::Vector3;
 use wgpu::{
     Backends, Color, DeviceDescriptor, ExperimentalFeatures, Features, FragmentState, Instance,
     InstanceDescriptor, Limits, PipelineLayoutDescriptor, PowerPreference,
@@ -19,6 +20,7 @@ use wgpu::{
 };
 
 use super::{Texture, Vertex};
+use crate::renderer::{Camera, CameraUniform};
 use winit::window::Window;
 
 // === Renderer Struct
@@ -36,6 +38,12 @@ pub struct Renderer {
     index_buffer: wgpu::Buffer,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: Texture,
+
+    // camera
+    camera: Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
 
     // Helper state
     size: (u32, u32),
@@ -124,6 +132,7 @@ impl Renderer {
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
+        surface.configure(&device, &config);
 
         let diffuse_bytes = include_bytes!("../../assets/textures/happy-tree.png");
         let diffuse_texture =
@@ -151,7 +160,7 @@ impl Renderer {
                 ],
                 label: Some("texture_bind_group_layout"),
             });
-        dbg!("Created texture layout group");
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
@@ -166,15 +175,58 @@ impl Renderer {
             ],
             label: Some("diffuse_bind_group"),
         });
-        dbg!("Created bind group");
+
+        let camera = Camera::new(
+            (0.0, 1.0, 2.0).into(),
+            (0.0, 0.0, 0.0).into(),
+            Vector3::unit_y(),
+            config.width as f32 / config.height as f32,
+            45.0,
+            0.1,
+            100.0,
+        );
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("camera_bind_group_layout"),
+            });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("camera_bind_group"),
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
         let shader = device.create_shader_module(include_wgsl!("../../shaders/basic.wgsl"));
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Basic Layout"),
-            bind_group_layouts: &[&texture_bind_group_layout],
+            bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
             push_constant_ranges: &[],
         });
-        surface.configure(&device, &config);
+
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Shape Pipeline"),
             layout: Some(&pipeline_layout),
@@ -239,6 +291,10 @@ impl Renderer {
             num_indices: num_indices,
             diffuse_bind_group: bind_group,
             diffuse_texture: diffuse_texture,
+            camera: camera,
+            camera_uniform: camera_uniform,
+            camera_buffer: camera_buffer,
+            camera_bind_group: camera_bind_group,
         })
     }
 
@@ -281,8 +337,10 @@ impl Renderer {
             });
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         } // drop render_pass so we can use encoder again
 
