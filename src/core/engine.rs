@@ -102,8 +102,9 @@ impl Engine {
 
     // render UI and other sprites in game
     fn render(&mut self) {
-        let renderer = self.renderer.as_mut().unwrap();
-        renderer.clear(120.0, 250.0, 88.0);
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.clear(120.0, 250.0, 88.0);
+        }
     }
 
     // handle window resizing changes using window module
@@ -136,11 +137,12 @@ impl ApplicationHandler for Engine {
         // create renderer
         if let Some(window) = &self.window {
             self.renderer = pollster::block_on(async {
-                Some(
-                    Renderer::new(window.inner(), self.backend.clone())
-                        .await
-                        .ok()?,
-                )
+                if let Ok(r) = Renderer::new(window.inner(), self.backend.clone()).await {
+                    Some(r)
+                } else {
+                    println!("Failed to create valid renderer");
+                    None
+                }
             });
         }
 
