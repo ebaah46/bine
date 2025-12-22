@@ -6,7 +6,7 @@
 
 use std::vec;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use wgpu::{
     Backends, Color, DeviceDescriptor, ExperimentalFeatures, Features, FragmentState, Instance,
@@ -18,7 +18,7 @@ use wgpu::{
     wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
 };
 
-use super::Vertex;
+use super::{Texture, Vertex};
 use winit::window::Window;
 
 // === Renderer Struct
@@ -33,18 +33,31 @@ pub struct Renderer {
     // pipeline internals
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    diffuse_bind_group: wgpu::BindGroup,
+    diffuse_texture: Texture,
 
     // Helper state
     size: (u32, u32),
-    num_vertices: u32,
+    num_indices: u32,
 }
 
 impl Renderer {
     const VERTICES: &[Vertex] = &[
-        Vertex::new([0.0, 0.5, 0.0], [1.0, 0.0, 0.0]),
-        Vertex::new([-0.5, -0.5, 0.0], [0.0, 1.0, 0.0]),
-        Vertex::new([0.5, -0.5, 0.0], [0.0, 0.0, 1.0]),
+        Vertex::new([-0.0868241, 0.49240386, 0.0], [0.4131759, 1.0 - 0.99240386]),
+        Vertex::new(
+            [-0.49513406, 0.06958647, 0.0],
+            [0.0048659444, 1.0 - 0.56958647],
+        ),
+        Vertex::new(
+            [-0.21918549, -0.44939706, 0.0],
+            [0.28081453, 1.0 - 0.05060294],
+        ),
+        Vertex::new([0.35966998, -0.3473291, 0.0], [0.85967, 1.0 - 0.1526709]),
+        Vertex::new([0.44147372, 0.2347359, 0.0], [0.9414737, 1.0 - 0.7347359]),
     ];
+
+    const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
 
     pub async fn new(window: &Window, backend: RendererBackends) -> Result<Self> {
         let size = window.inner_size();
@@ -78,18 +91,20 @@ impl Renderer {
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
-            .await?;
+            .await
+            .context("Failed to create adapter")?;
 
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
                 label: None,
-                required_features: Features::empty(),
+                required_features: Features::ADDRESS_MODE_CLAMP_TO_BORDER,
                 experimental_features: ExperimentalFeatures::disabled(),
                 required_limits: Limits::defaults(),
                 memory_hints: Default::default(),
                 trace: Trace::Off,
             })
-            .await?;
+            .await
+            .context("Failed to create device")?;
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
@@ -110,16 +125,56 @@ impl Renderer {
             view_formats: vec![],
         };
 
-        surface.configure(&device, &config);
+        let diffuse_bytes = include_bytes!("../../assets/textures/happy-tree.png");
+        let diffuse_texture =
+            Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
 
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            });
+        dbg!("Created texture layout group");
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+            ],
+            label: Some("diffuse_bind_group"),
+        });
+        dbg!("Created bind group");
         let shader = device.create_shader_module(include_wgsl!("../../shaders/basic.wgsl"));
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Basic Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&texture_bind_group_layout],
             push_constant_ranges: &[],
         });
-
+        surface.configure(&device, &config);
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Shape Pipeline"),
             layout: Some(&pipeline_layout),
@@ -164,7 +219,13 @@ impl Renderer {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let num_vertices = Self::VERTICES.len() as u32;
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&Self::INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = Self::INDICES.len() as u32;
         Ok(Self {
             surface: surface,
             instance: instance,
@@ -174,7 +235,10 @@ impl Renderer {
             size: (size.width, size.height),
             pipeline: render_pipeline,
             vertex_buffer: vertex_buffer,
-            num_vertices: num_vertices,
+            index_buffer: index_buffer,
+            num_indices: num_indices,
+            diffuse_bind_group: bind_group,
+            diffuse_texture: diffuse_texture,
         })
     }
 
@@ -216,8 +280,10 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         } // drop render_pass so we can use encoder again
 
         self.queue.submit(std::iter::once(encoder.finish()));
