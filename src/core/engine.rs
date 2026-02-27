@@ -22,18 +22,41 @@ use super::super::{
 
 use std::time::Instant;
 
+// === Game Trait
+// This is the user facing trait that every new game has to
+// satisfy. It exposes on_init(), on_update() and on_draw()
+pub trait Game {
+    /**
+     * This is where the game will load textures and other initial setup
+     * for the game. This will always be called after window and renderer
+     * are created.
+     */
+    fn on_init(&mut self, renderer: &mut Renderer);
+
+    /**
+     * This receives the delta time and a reference to input so the game will
+     * read the input keys and update the game state. All game state processing is
+     * done here.
+     */
+    fn on_update(&mut self, dt: f32, input: &Input);
+
+    /**
+     * This is called on each frame with a reference to the renderer so the game
+     * can issue draw calls.
+     */
+    fn on_draw(&mut self, renderer: &mut Renderer);
+}
+
 // === Engine struct
 //
-pub struct Engine {
+pub struct Engine<G: Game> {
     // main resources
     window: Option<Window>,
     renderer: Option<Renderer>,
+    game: G, // game object
 
     // config settings for window
-    title: String,
-    height: u32,
-    width: u32,
-
+    window_config: WindowConfig,
     // renderer specific config
     backend: RendererBackends,
 
@@ -49,17 +72,16 @@ pub struct Engine {
 // Has engine constructor and helper methods for running
 // game engine.
 //
-impl Engine {
+impl<G: Game> Engine<G> {
     const FRAME_TIME_CAP: f32 = 0.25; //
     const TIME_STEP: f32 = 1.0 / 60.0; // how often should I update game logic
 
-    pub fn new(title: &str, width: u32, height: u32, backend: RendererBackends) -> Self {
+    pub fn new(window_config: WindowConfig, backend: RendererBackends, game: G) -> Self {
         Self {
             window: None,
             renderer: None,
-            title: title.into(),
-            width: width,
-            height: height,
+            game: game,
+            window_config: window_config,
             last_update: None,
             accumulator: 0.0,
             backend: backend,
@@ -98,12 +120,15 @@ impl Engine {
     }
 
     // update game logic and time changes
-    fn update(&mut self, delta_time: f32) {}
+    fn update(&mut self, delta_time: f32) {
+        self.game.on_update(delta_time, &self.input);
+    }
 
     // render UI and other sprites in game
     fn render(&mut self) {
         if let Some(renderer) = self.renderer.as_mut() {
-            renderer.clear(120.0, 250.0, 88.0);
+            self.game.on_draw(renderer);
+            // renderer.clear(120.0, 250.0, 88.0);
         }
     }
 
@@ -113,18 +138,10 @@ impl Engine {
 }
 
 // === winit ApplicationHandler for Engine
-impl ApplicationHandler for Engine {
+impl<G: Game> ApplicationHandler for Engine<G> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         // create window
-        let config = WindowConfig {
-            title: self.title.clone(),
-            width: self.width,
-            height: self.height,
-            resizable: true,
-            vsync: true,
-            fullscreen: false,
-        };
-        match Window::create(config, event_loop) {
+        match Window::create(&self.window_config, event_loop) {
             Ok(window) => {
                 println!("Window created successfully!");
                 self.window = Some(window);
@@ -147,6 +164,11 @@ impl ApplicationHandler for Engine {
         }
 
         self.last_update = Some(Instant::now());
+
+        // initialize game after renderer is created
+        if let Some(renderer) = self.renderer.as_mut() {
+            self.game.on_init(renderer);
+        }
     }
 
     fn window_event(
