@@ -59,7 +59,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn create(config: WindowConfig, event_loop: &ActiveEventLoop) -> anyhow::Result<Self>
+    pub fn create(config: &WindowConfig, event_loop: &ActiveEventLoop) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -72,7 +72,7 @@ impl Window {
             inner: window,
             height: config.height,
             width: config.width,
-            title: config.title,
+            title: config.title.clone(),
             fullscreen: config.fullscreen,
             vsync: config.vsync,
             resizable: config.resizable,
