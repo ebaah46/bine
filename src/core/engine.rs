@@ -56,10 +56,7 @@ pub struct Engine<G: Game> {
     game: G, // game object
 
     // config settings for window
-    title: String,
-    height: u32,
-    width: u32,
-
+    window_config: WindowConfig,
     // renderer specific config
     backend: RendererBackends,
 
@@ -79,14 +76,12 @@ impl<G: Game> Engine<G> {
     const FRAME_TIME_CAP: f32 = 0.25; //
     const TIME_STEP: f32 = 1.0 / 60.0; // how often should I update game logic
 
-    pub fn new(title: &str, width: u32, height: u32, backend: RendererBackends, game: G) -> Self {
+    pub fn new(window_config: WindowConfig, backend: RendererBackends, game: G) -> Self {
         Self {
             window: None,
             renderer: None,
             game: game,
-            title: title.into(),
-            width: width,
-            height: height,
+            window_config: window_config,
             last_update: None,
             accumulator: 0.0,
             backend: backend,
@@ -146,15 +141,7 @@ impl<G: Game> Engine<G> {
 impl<G: Game> ApplicationHandler for Engine<G> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         // create window
-        let config = WindowConfig {
-            title: self.title.clone(),
-            width: self.width,
-            height: self.height,
-            resizable: true,
-            vsync: true,
-            fullscreen: false,
-        };
-        match Window::create(config, event_loop) {
+        match Window::create(&self.window_config, event_loop) {
             Ok(window) => {
                 println!("Window created successfully!");
                 self.window = Some(window);
