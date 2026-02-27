@@ -4,11 +4,11 @@
 //!
 //! This renderer module is tied to wgpu library
 
-use std::vec;
+use std::{fs, num, path::Path, vec};
 
 use anyhow::{Context, Result};
 
-use cgmath::Vector3;
+use cgmath::{Point3, Vector3};
 use wgpu::{
     Backends, Color, DeviceDescriptor, ExperimentalFeatures, Features, FragmentState, Instance,
     InstanceDescriptor, Limits, PipelineLayoutDescriptor, PowerPreference,
@@ -34,39 +34,27 @@ pub struct Renderer {
 
     // pipeline internals
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    diffuse_bind_group: wgpu::BindGroup,
-    diffuse_texture: Texture,
+    size: (u32, u32),
+
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    camera_bind_group_layout: wgpu::BindGroupLayout,
 
     // camera
-    camera: Camera,
-    camera_uniform: CameraUniform,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
+    camera: Option<Camera>,
+    camera_uniform: Option<CameraUniform>,
+    camera_buffer: Option<wgpu::Buffer>,
+    camera_bind_group: Option<wgpu::BindGroup>,
 
-    // Helper state
-    size: (u32, u32),
-    num_indices: u32,
+    vertex_buffer: Option<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
+    diffuse_texture: Option<Texture>,
+    diffuse_bind_group: Option<wgpu::BindGroup>,
+    num_indices: Option<u32>,
 }
 
 impl Renderer {
-    const VERTICES: &[Vertex] = &[
-        Vertex::new([-0.0868241, 0.49240386, 0.0], [0.4131759, 1.0 - 0.99240386]),
-        Vertex::new(
-            [-0.49513406, 0.06958647, 0.0],
-            [0.0048659444, 1.0 - 0.56958647],
-        ),
-        Vertex::new(
-            [-0.21918549, -0.44939706, 0.0],
-            [0.28081453, 1.0 - 0.05060294],
-        ),
-        Vertex::new([0.35966998, -0.3473291, 0.0], [0.85967, 1.0 - 0.1526709]),
-        Vertex::new([0.44147372, 0.2347359, 0.0], [0.9414737, 1.0 - 0.7347359]),
-    ];
-
-    const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
-
+    //TODO: Builder pattern could be used to make this Renderer construction
+    //      more idiomatic. But I do not have time for that now.
     pub async fn new(window: &Window, backend: RendererBackends) -> Result<Self> {
         let size = window.inner_size();
         let bd = match backend {
@@ -134,10 +122,6 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("../../assets/textures/happy-tree.png");
-        let diffuse_texture =
-            Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
-
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -161,40 +145,6 @@ impl Renderer {
                 label: Some("texture_bind_group_layout"),
             });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-            label: Some("diffuse_bind_group"),
-        });
-
-        let camera = Camera::new(
-            (0.0, 1.0, 2.0).into(),
-            (0.0, 0.0, 0.0).into(),
-            Vector3::unit_y(),
-            config.width as f32 / config.height as f32,
-            45.0,
-            0.1,
-            100.0,
-        );
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
-
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
         let camera_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
@@ -209,15 +159,6 @@ impl Renderer {
                 }],
                 label: Some("camera_bind_group_layout"),
             });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("camera_bind_group"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
 
         let shader = device.create_shader_module(include_wgsl!("../../shaders/basic.wgsl"));
 
@@ -265,19 +206,6 @@ impl Renderer {
             cache: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&Self::VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&Self::INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let num_indices = Self::INDICES.len() as u32;
         Ok(Self {
             surface: surface,
             instance: instance,
@@ -286,21 +214,23 @@ impl Renderer {
             config: config,
             size: (size.width, size.height),
             pipeline: render_pipeline,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
-            num_indices: num_indices,
-            diffuse_bind_group: bind_group,
-            diffuse_texture: diffuse_texture,
-            camera: camera,
-            camera_uniform: camera_uniform,
-            camera_buffer: camera_buffer,
-            camera_bind_group: camera_bind_group,
+            vertex_buffer: None,
+            index_buffer: None,
+            num_indices: None,
+            diffuse_bind_group: None,
+            diffuse_texture: None,
+            camera: None,
+            camera_uniform: None,
+            camera_buffer: None,
+            camera_bind_group: None,
+            texture_bind_group_layout: texture_bind_group_layout,
+            camera_bind_group_layout: camera_bind_group_layout,
         })
     }
 
     // Clearing the surface
     // Basic necessity for rendering
-    pub fn clear(&self, r: f64, g: f64, b: f64) {
+    pub fn render(&self, r: f64, g: f64, b: f64) {
         let frame = self
             .surface
             .get_current_texture()
@@ -324,7 +254,7 @@ impl Renderer {
                             r: r,
                             g: g,
                             b: b,
-                            a: 0.5,
+                            a: 0.5, // default at this point
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -336,12 +266,21 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            if let Some(diffuse_bind_group) = &self.diffuse_bind_group {
+                render_pass.set_bind_group(0, diffuse_bind_group, &[]);
+            }
+            if let Some(camera_bind_group) = &self.camera_bind_group {
+                render_pass.set_bind_group(1, camera_bind_group, &[]);
+            }
+            if let Some(vertex_buffer) = &self.vertex_buffer {
+                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            }
+            if let Some(index_buffer) = &self.index_buffer {
+                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            }
+            if let Some(num_indices) = self.num_indices {
+                render_pass.draw_indexed(0..num_indices, 0, 0..1);
+            }
         } // drop render_pass so we can use encoder again
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -356,6 +295,93 @@ impl Renderer {
             self.size = (width, height);
             self.surface.configure(&self.device, &self.config);
         }
+    }
+
+    // Provides access for game to register data to be used in
+    // renderer.
+    pub fn load_texture(&mut self, bytes: &[u8], file_name: &str) {
+        let diffuse_texture = Texture::from_bytes(&self.device, &self.queue, bytes, file_name)
+            .expect("Failed to load texture from bytes");
+
+        let texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                },
+            ],
+            label: Some("diffuse_bind_group"),
+        });
+        self.diffuse_texture = Some(diffuse_texture);
+        self.diffuse_bind_group = Some(texture_bind_group);
+    }
+
+    // Provides access for the game to register the indices and vertices for
+    // the textures that it provides
+    pub fn set_geometry(&mut self, vertices: &[Vertex], indices: &[u16]) {
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        let num_indices = indices.len() as u32;
+
+        self.num_indices = Some(num_indices);
+        self.index_buffer = Some(index_buffer);
+        self.vertex_buffer = Some(vertex_buffer);
+    }
+
+    // Provides access for the game to set the position of the camera
+    pub fn set_camera(
+        &mut self,
+        eye: Point3<f32>,
+        target: Point3<f32>,
+        up: Vector3<f32>,
+        aspect: f32,
+        fovy: f32,
+        znear: f32,
+        zfar: f32,
+    ) {
+        let camera = Camera::new(eye, target, up, aspect, fovy, znear, zfar);
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let camera_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("camera_bind_group"),
+            layout: &self.camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
+        self.camera = Some(camera);
+        self.camera_bind_group = Some(camera_bind_group);
     }
 }
 
