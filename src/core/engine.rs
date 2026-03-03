@@ -112,11 +112,10 @@ impl<G: Game> Engine<G> {
             }
         }
 
-        self.render();
-
         self.last_update = Some(dt);
-
         self.input.update();
+
+        self.render();
     }
 
     // update game logic and time changes

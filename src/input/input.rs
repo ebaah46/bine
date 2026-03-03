@@ -93,4 +93,12 @@ impl Input {
             mouse.update_scroll(delta);
         }
     }
+
+    pub fn mouse_scroll_delta(&self) -> Option<f32> {
+        self.mouse.as_ref().map(|mouse| mouse.scroll_delta())
+    }
+
+    pub fn mouse_position_delta(&self) -> Option<(f64, f64)> {
+        self.mouse.as_ref().map(|mouse| mouse.position_delta())
+    }
 }
