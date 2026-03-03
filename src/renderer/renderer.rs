@@ -381,7 +381,22 @@ impl Renderer {
         });
 
         self.camera = Some(camera);
+        self.camera_buffer = Some(camera_buffer);
+        self.camera_uniform = Some(camera_uniform);
         self.camera_bind_group = Some(camera_bind_group);
+    }
+
+    pub fn update_camera(&mut self, camera: &Camera) {
+        if let Some(camera_uniform) = &mut self.camera_uniform {
+            camera_uniform.update_view_proj(camera);
+        }
+
+        if let Some((camera_buffer, camera_uniform)) =
+            self.camera_buffer.as_ref().zip(self.camera_uniform)
+        {
+            self.queue
+                .write_buffer(camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
+        }
     }
 }
 

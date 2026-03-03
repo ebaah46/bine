@@ -36,11 +36,9 @@ impl Mouse {
 
     pub fn update(&mut self) {
         self.last_position = self.position.clone();
-        self.position = (0.0, 0.0);
 
         self.last_pressed_buttons = self.pressed_buttons.clone();
         self.pressed_buttons.clear();
-        self.scroll_delta = 0.0;
     }
 
     pub fn position(&self) -> (f64, f64) {
