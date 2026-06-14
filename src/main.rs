@@ -1,6 +1,6 @@
 use bine::{
     core::{Engine, Game},
-    renderer::{Camera, Renderer, RendererBackends, Vertex},
+    renderer::{Camera, ModelVertex, Renderer, RendererBackends, Vertex},
     window::WindowConfig,
 };
 
@@ -30,6 +30,8 @@ impl Game for DemoGame {
             0.1,
             100.0,
         );
+
+        renderer.set_light_properties(&Self::LIGHT_POS, &Self::LIGHT_COLOR);
     }
 
     fn on_update(&mut self, dt: f32, input: &bine::input::Input) {
@@ -48,21 +50,39 @@ impl Game for DemoGame {
 }
 
 impl DemoGame {
-    const VERTICES: &[Vertex] = &[
-        Vertex::new([-0.0868241, 0.49240386, 0.0], [0.4131759, 1.0 - 0.99240386]),
-        Vertex::new(
-            [-0.49513406, 0.06958647, 0.0],
-            [0.0048659444, 1.0 - 0.56958647],
-        ),
-        Vertex::new(
-            [-0.21918549, -0.44939706, 0.0],
-            [0.28081453, 1.0 - 0.05060294],
-        ),
-        Vertex::new([0.35966998, -0.3473291, 0.0], [0.85967, 1.0 - 0.1526709]),
-        Vertex::new([0.44147372, 0.2347359, 0.0], [0.9414737, 1.0 - 0.7347359]),
+    const VERTICES: &[ModelVertex] = &[
+        ModelVertex {
+            position: [-0.0868241, 0.49240386, 0.0],
+            tex_coords: [0.4131759, 1.0 - 0.99240386],
+            normal: [0.0, 0.0, 0.0],
+        },
+        ModelVertex {
+            position: [-0.49513406, 0.06958647, 0.0],
+            tex_coords: [0.0048659444, 1.0 - 0.56958647],
+            normal: [0.0, 0.0, 0.0],
+        },
+        ModelVertex {
+            position: [-0.21918549, -0.44939706, 0.0],
+            tex_coords: [0.28081453, 1.0 - 0.05060294],
+            normal: [0.0, 0.0, 0.0],
+        },
+        ModelVertex {
+            position: [0.35966998, -0.3473291, 0.0],
+            tex_coords: [0.85967, 1.0 - 0.1526709],
+            normal: [0.0, 0.0, 0.0],
+        },
+        ModelVertex {
+            position: [0.44147372, 0.2347359, 0.0],
+            tex_coords: [0.9414737, 1.0 - 0.7347359],
+            normal: [0.0, 0.0, 0.0],
+        },
     ];
 
     const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+
+    const LIGHT_POS: [f32; 3] = [2.0, 2.0, 2.0];
+
+    const LIGHT_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
 
     fn new() -> Self {
         Self {
