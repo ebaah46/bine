@@ -14,6 +14,7 @@ pollster = "0.4.0"
 tokio = "1.48.0"
 wgpu = "27.0.1"
 winit = "0.30.12"
+tobj = { version = "3.2", default-features = false, features = ["async"]}
 
 
 [build-dependencies]

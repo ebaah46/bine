@@ -10,6 +10,8 @@ pub use camera::Camera;
 pub use camera::CameraUniform;
 pub use instance::{Instance, InstanceRaw};
 pub use light::LightUniform;
+pub use model::DrawModel;
+pub use model::Model;
 pub use model::ModelVertex;
 pub use model::Vertex;
 pub use renderer::Renderer;

@@ -4,7 +4,7 @@
 //!
 //! This renderer module is tied to wgpu library
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 
 use cgmath::{Point3, Vector3, prelude::*};
 use wgpu::{
@@ -17,10 +17,13 @@ use wgpu::{
     wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
 };
 
-use super::{Texture, Vertex};
-use crate::renderer::{
-    Camera, CameraUniform, Instance as RendererInstance, InstanceRaw, LightUniform, ModelVertex,
-    Texture as RendererTexture,
+use super::{DrawModel, Model, Texture, Vertex};
+use crate::{
+    core::resources,
+    renderer::{
+        Camera, CameraUniform, Instance as RendererInstance, InstanceRaw, LightUniform,
+        ModelVertex, Texture as RendererTexture,
+    },
 };
 use winit::window::Window;
 
@@ -54,15 +57,10 @@ pub struct Renderer {
     camera_buffer: Option<wgpu::Buffer>,
     camera_bind_group: Option<wgpu::BindGroup>,
 
+    models: Vec<Model>,
     // instances
     instances: Vec<RendererInstance>,
-    instnace_buffer: wgpu::Buffer,
-
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
-    diffuse_texture: Option<Texture>,
-    diffuse_bind_group: Option<wgpu::BindGroup>,
-    num_indices: Option<u32>,
+    instance_buffer: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -189,15 +187,18 @@ impl Renderer {
             });
 
         // source: sotrh.github.io/learn-wgpu/beginner/tutorial7-instancing/#the-instance-buffer
-        const NUM_INSTANCES_PER_ROW: i32 = 5;
+        const NUM_INSTANCES_PER_ROW: i32 = 3;
         const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
             NUM_INSTANCES_PER_ROW as f32 * 0.5,
             0.0,
             NUM_INSTANCES_PER_ROW as f32 * 0.5,
         );
+        const SPACE_BETWEEN: f32 = 8.0;
         let instances = (0..NUM_INSTANCES_PER_ROW)
             .flat_map(|z| {
                 (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
                     let position = cgmath::Vector3 {
                         x: x as f32,
                         y: 0.0,
@@ -253,14 +254,9 @@ impl Renderer {
             config: config,
             size: (size.width, size.height),
             pipeline: render_pipeline,
-            vertex_buffer: None,
-            index_buffer: None,
-            num_indices: None,
-            diffuse_bind_group: None,
-            diffuse_texture: None,
             depth_texture: depth_texture,
             instances: instances,
-            instnace_buffer: instance_buffer,
+            instance_buffer: instance_buffer,
             light_buffer: None,
             light_uniform: None,
             light_bind_group: None,
@@ -271,6 +267,7 @@ impl Renderer {
             camera_bind_group: None,
             texture_bind_group_layout: texture_bind_group_layout,
             camera_bind_group_layout: camera_bind_group_layout,
+            models: vec![],
         })
     }
 
@@ -318,26 +315,24 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
             render_pass.set_pipeline(&self.pipeline);
-            if let Some(diffuse_bind_group) = &self.diffuse_bind_group {
-                render_pass.set_bind_group(0, diffuse_bind_group, &[]);
-            }
+
             if let Some(camera_bind_group) = &self.camera_bind_group {
                 render_pass.set_bind_group(1, camera_bind_group, &[]);
             }
             if let Some(light_bind_group) = &self.light_bind_group {
                 render_pass.set_bind_group(2, light_bind_group, &[]);
             }
-            if let Some(vertex_buffer) = &self.vertex_buffer {
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            }
-            render_pass.set_vertex_buffer(1, self.instnace_buffer.slice(..));
 
-            if let Some(index_buffer) = &self.index_buffer {
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            }
-            if let Some(num_indices) = self.num_indices {
-                render_pass.draw_indexed(0..num_indices, 0, 0..self.instances.len() as u32);
+            if let Some(camera_bind_group) = &self.camera_bind_group {
+                render_pass.draw_model_instanced(
+                    &self.models[0],
+                    0..self.instances.len() as u32,
+                    camera_bind_group,
+                );
             }
         } // drop render_pass so we can use encoder again
 
@@ -355,30 +350,6 @@ impl Renderer {
         }
         self.depth_texture =
             RendererTexture::create_depth_texture(&self.device, &self.config, "depth_texture");
-    }
-
-    // Provides access for game to register data to be used in
-    // renderer.
-    pub fn load_texture(&mut self, bytes: &[u8], file_name: &str) {
-        let diffuse_texture = Texture::from_bytes(&self.device, &self.queue, bytes, file_name)
-            .expect("Failed to load texture from bytes");
-
-        let texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-            label: Some("diffuse_bind_group"),
-        });
-        self.diffuse_texture = Some(diffuse_texture);
-        self.diffuse_bind_group = Some(texture_bind_group);
     }
 
     // Provides access for the game to define some key properties of the lighting module
@@ -407,30 +378,19 @@ impl Renderer {
         self.light_bind_group = Some(light_bind_group);
     }
 
-    // Provides access for the game to register the indices and vertices for
-    // the textures that it provides
-    pub fn set_geometry(&mut self, vertices: &[ModelVertex], indices: &[u16]) {
-        let vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        let index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-        let num_indices = indices.len() as u32;
-
-        self.num_indices = Some(num_indices);
-        self.index_buffer = Some(index_buffer);
-        self.vertex_buffer = Some(vertex_buffer);
+    // Provide the ability for game to load relevant models
+    // This could be threaded as load could take a while
+    pub fn set_models_to_load(&mut self, model_paths: &[&str]) -> anyhow::Result<()> {
+        for &path in model_paths {
+            let model = pollster::block_on(resources::load_model(
+                path,
+                &self.device,
+                &self.queue,
+                &self.texture_bind_group_layout,
+            ))?;
+            self.models.push(model);
+        }
+        Ok(())
     }
 
     // Provides access for the game to set the position of the camera
