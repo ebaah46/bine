@@ -45,12 +45,12 @@ impl Game for DemoGame {
 
     fn on_draw(&mut self, renderer: &mut Renderer) {
         renderer.update_camera(&self.camera_controller.to_camera());
-        renderer.render(120.0, 250.0, 88.0);
+        renderer.render(0.0, 0.0, 0.0);
     }
 }
 
 impl DemoGame {
-    const LIGHT_POS: [f32; 3] = [2.0, 2.0, 2.0];
+    const LIGHT_POS: [f32; 3] = [1.0, 0.0, 1.0];
 
     const LIGHT_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
 

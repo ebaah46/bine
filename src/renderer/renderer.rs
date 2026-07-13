@@ -22,7 +22,7 @@ use crate::{
     core::resources,
     renderer::{
         Camera, CameraUniform, Instance as RendererInstance, InstanceRaw, LightUniform,
-        ModelVertex, Texture as RendererTexture,
+        ModelVertex, Texture as RendererTexture, model::DrawLight,
     },
 };
 use winit::window::Window;
@@ -38,6 +38,7 @@ pub struct Renderer {
 
     // pipeline internals
     pipeline: wgpu::RenderPipeline,
+    light_pipeline: wgpu::RenderPipeline,
     size: (u32, u32),
 
     // texture
@@ -187,7 +188,7 @@ impl Renderer {
             });
 
         // source: sotrh.github.io/learn-wgpu/beginner/tutorial7-instancing/#the-instance-buffer
-        const NUM_INSTANCES_PER_ROW: i32 = 3;
+        const NUM_INSTANCES_PER_ROW: i32 = 1;
         const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
             NUM_INSTANCES_PER_ROW as f32 * 0.5,
             0.0,
@@ -243,8 +244,30 @@ impl Renderer {
             push_constant_ranges: &[],
         });
 
-        let render_pipeline =
-            Self::create_render_pipeline(&device, &pipeline_layout, config.format, None, shader);
+        let render_pipeline = Self::create_render_pipeline(
+            &device,
+            &pipeline_layout,
+            config.format,
+            None,
+            &[ModelVertex::desc(), InstanceRaw::desc()],
+            shader,
+        );
+
+        let light_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Basic light render pipeline layout"),
+            bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let light_shader = device.create_shader_module(include_wgsl!("../../shaders/light.wgsl"));
+        let light_render_pipeline = Self::create_render_pipeline(
+            &device,
+            &light_pipeline_layout,
+            config.format,
+            Some(RendererTexture::DEPTH_FORMAT),
+            &[ModelVertex::desc()],
+            light_shader,
+        );
 
         Ok(Self {
             surface: surface,
@@ -257,6 +280,7 @@ impl Renderer {
             depth_texture: depth_texture,
             instances: instances,
             instance_buffer: instance_buffer,
+            light_pipeline: light_render_pipeline,
             light_buffer: None,
             light_uniform: None,
             light_bind_group: None,
@@ -297,7 +321,7 @@ impl Renderer {
                             r: r,
                             g: g,
                             b: b,
-                            a: 0.5, // default at this point
+                            a: 0.8, // default at this point
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -318,21 +342,23 @@ impl Renderer {
 
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-            render_pass.set_pipeline(&self.pipeline);
+            if let (Some(camera_bind_group), Some(light_bind_group)) =
+                (&self.camera_bind_group, &self.light_bind_group)
+            {
+                render_pass.set_pipeline(&self.light_pipeline);
+                self.models.iter().for_each(|m| {
+                    render_pass.draw_light_model(m, camera_bind_group, light_bind_group);
+                });
 
-            if let Some(camera_bind_group) = &self.camera_bind_group {
-                render_pass.set_bind_group(1, camera_bind_group, &[]);
-            }
-            if let Some(light_bind_group) = &self.light_bind_group {
-                render_pass.set_bind_group(2, light_bind_group, &[]);
-            }
-
-            if let Some(camera_bind_group) = &self.camera_bind_group {
-                render_pass.draw_model_instanced(
-                    &self.models[0],
-                    0..self.instances.len() as u32,
-                    camera_bind_group,
-                );
+                render_pass.set_pipeline(&self.pipeline);
+                self.models.iter().for_each(|m| {
+                    render_pass.draw_model_instanced(
+                        m,
+                        0..self.instances.len() as u32,
+                        camera_bind_group,
+                        light_bind_group,
+                    );
+                });
             }
         } // drop render_pass so we can use encoder again
 
@@ -443,6 +469,24 @@ impl Renderer {
             self.queue
                 .write_buffer(camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
         }
+
+        // TODO: This part must be removed, this is for testing purposes,
+        // should be moved to separate renderer method.
+        // Update the light
+        //
+        println!("Light rotating");
+        if let (Some(light_uniform), Some(light_buffer)) =
+            (self.light_uniform.as_mut(), &self.light_buffer)
+        {
+            let old_position: cgmath::Vector3<_> = light_uniform.position.clone().into();
+            light_uniform.position =
+                (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
+                    * old_position)
+                    .into();
+
+            self.queue
+                .write_buffer(&light_buffer, 0, bytemuck::cast_slice(&[*light_uniform]));
+        }
     }
 
     fn create_render_pipeline(
@@ -450,6 +494,7 @@ impl Renderer {
         layout: &wgpu::PipelineLayout,
         color_format: wgpu::TextureFormat,
         depth_format: Option<wgpu::TextureFormat>,
+        vertex_layouts: &[wgpu::VertexBufferLayout],
         shader: wgpu::ShaderModule,
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -459,7 +504,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[ModelVertex::desc(), InstanceRaw::desc()],
+                buffers: vertex_layouts,
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -488,7 +533,10 @@ impl Renderer {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: color_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
