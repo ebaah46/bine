@@ -4,76 +4,63 @@
 //!
 //! Handles all that has to do with mouse usage
 //!
-use std::collections::HashSet;
-use winit::event::{ElementState, MouseButton};
+use winit::event::{ElementState, MouseScrollDelta};
+
+use crate::input::input::{InputSource, UnifiedInputEvent, UniversalAxes};
 
 // === Mouse
+#[derive(Debug, Default)]
 pub struct Mouse {
     // Position
     position: (f64, f64),
-    last_position: (f64, f64),
-
-    // Buttons
-    pressed_buttons: HashSet<MouseButton>,
-    last_pressed_buttons: HashSet<MouseButton>,
-
     scroll_delta: f64,
 }
 
 impl Mouse {
     pub fn new() -> Self {
-        let position = (0.0, 0.0);
-        let scroll_delta = 0.0;
-
-        Self {
-            position: position,
-            last_position: position,
-            pressed_buttons: HashSet::new(),
-            last_pressed_buttons: HashSet::new(),
-            scroll_delta: scroll_delta,
-        }
-    }
-
-    pub fn update(&mut self) {
-        self.last_position = self.position.clone();
-
-        self.last_pressed_buttons = self.pressed_buttons.clone();
-        self.pressed_buttons.clear();
+        Default::default()
     }
 
     pub fn position(&self) -> (f64, f64) {
         self.position
     }
 
-    pub fn position_delta(&self) -> (f64, f64) {
-        (
-            self.position.0 - self.last_position.0,
-            self.position.1 - self.last_position.1,
-        )
-    }
-
-    pub fn is_button_pressed(&self, button: MouseButton) -> bool {
-        self.pressed_buttons.contains(&button)
-    }
-
     pub fn scroll_delta(&self) -> f32 {
-        0.0
+        self.scroll_delta as f32
     }
+}
 
-    // === Mouse event handlers
-    //
-    pub fn update_position(&mut self, x: f64, y: f64) {
-        self.position = (x, y)
-    }
-
-    pub fn update_scroll(&mut self, delta: f64) {
-        self.scroll_delta += delta;
-    }
-
-    pub fn button_click(&mut self, button: MouseButton, state: ElementState) {
-        match state {
-            ElementState::Pressed => self.pressed_buttons.insert(button),
-            ElementState::Released => self.pressed_buttons.remove(&button),
+impl InputSource for Mouse {
+    fn process_events(&mut self, ctx: &mut super::input::EventContext) {
+        let UnifiedInputEvent::Winit(event) = ctx.event else {
+            return;
         };
+        log::info!("Received Mouse event:{:?}", &event);
+
+        match event {
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.position = (position.x, position.y);
+                ctx.buffer
+                    .inject_axes_event(UniversalAxes::MouseMovementX, position.x as f32);
+                ctx.buffer
+                    .inject_axes_event(UniversalAxes::MouseMovementY, position.y as f32);
+            }
+            winit::event::WindowEvent::CursorEntered { .. } => {}
+            winit::event::WindowEvent::CursorLeft { .. } => {}
+            winit::event::WindowEvent::MouseWheel { delta, .. } => {
+                let d = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => *y as f64,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y / 100.0,
+                    _ => 0.0,
+                };
+                self.scroll_delta += d;
+            }
+            winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                let key = super::input::UniversalKey::Mouse(*button);
+                let is_pressed = *state == ElementState::Pressed;
+                ctx.buffer.inject_key_event(key, is_pressed);
+            }
+            _ => (),
+        }
     }
 }
