@@ -3,46 +3,32 @@
 //! Author: BEKs => 25.11.2025
 //!
 //! Handles all that has to do with Keyboard
-use std::collections::HashSet;
+use winit::{
+    event::ElementState,
+    keyboard::{self},
+};
 
-use winit::{event::ElementState, keyboard::KeyCode};
+use crate::input::input::{InputSource, UnifiedInputEvent, UniversalKey};
 
-pub struct Keyboard {
-    pressed_keys: HashSet<KeyCode>,
-    last_pressed_keys: HashSet<KeyCode>,
-}
+#[derive(Debug, Default)]
+pub struct Keyboard;
 
-impl Keyboard {
-    pub fn new() -> Self {
-        Self {
-            pressed_keys: HashSet::new(),
-            last_pressed_keys: HashSet::new(),
-        }
-    }
-
-    pub fn update(&mut self) {
-        self.last_pressed_keys = self.pressed_keys.clone();
-        self.pressed_keys.clear();
-    }
-
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key) && !self.last_pressed_keys.contains(&key)
-    }
-
-    pub fn is_key_released(&self, key: KeyCode) -> bool {
-        !self.pressed_keys.contains(&key) && self.last_pressed_keys.contains(&key)
-    }
-
-    pub fn is_key_held_down(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
-    }
-
-    // === Keyboard event handlers
-    //
-    pub fn pressed(&mut self, key: KeyCode, state: ElementState) {
-        match state {
-            ElementState::Pressed => self.pressed_keys.insert(key),
-            ElementState::Released => self.pressed_keys.remove(&key),
+impl InputSource for Keyboard {
+    fn process_events(&mut self, ctx: &mut super::input::EventContext) {
+        let UnifiedInputEvent::Winit(event) = ctx.event else {
+            return;
         };
+        log::info!("Received Keyboard event:{:?}", &event);
+
+        match &event {
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                if let keyboard::PhysicalKey::Code(code) = event.physical_key {
+                    let key = UniversalKey::Keyboard(code);
+                    let is_pressed = event.state == ElementState::Pressed;
+                    ctx.buffer.inject_key_event(key, is_pressed);
+                }
+            }
+            _ => (),
+        }
     }
 }
