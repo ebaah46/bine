@@ -1,5 +1,5 @@
 pub mod input;
-pub use input::Input;
+pub use input::{InputSnapshot, InputSystem, UniversalAxes, UniversalKey};
 
 pub mod gamepad;
 pub mod keyboard;

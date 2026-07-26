@@ -4,16 +4,15 @@
 //!
 //! This module orchestrates and manages all other components
 //! and their interaction
+use log::info;
 use pollster;
 
 use winit::{
-    application::ApplicationHandler,
-    event::{MouseScrollDelta, WindowEvent},
-    event_loop::ActiveEventLoop,
+    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::WindowId,
 };
 
-use crate::input::Input;
+use crate::input::InputSystem;
 
 use super::super::{
     renderer::{Renderer, RendererBackends},
@@ -30,15 +29,16 @@ pub trait Game {
      * This is where the game will load textures and other initial setup
      * for the game. This will always be called after window and renderer
      * are created.
+     * Also provides the InputSystem so you can choose prefered devices
      */
-    fn on_init(&mut self, renderer: &mut Renderer);
+    fn on_init(&mut self, renderer: &mut Renderer, input: &mut InputSystem);
 
     /**
      * This receives the delta time and a reference to input so the game will
      * read the input keys and update the game state. All game state processing is
      * done here.
      */
-    fn on_update(&mut self, dt: f32, input: &Input);
+    fn on_update(&mut self, dt: f32, input: &InputSystem);
 
     /**
      * This is called on each frame with a reference to the renderer so the game
@@ -61,7 +61,7 @@ pub struct Engine<G: Game> {
     backend: RendererBackends,
 
     // input device
-    input: Input,
+    input: InputSystem,
 
     // timing details
     last_update: Option<Instant>,
@@ -85,7 +85,7 @@ impl<G: Game> Engine<G> {
             last_update: None,
             accumulator: 0.0,
             backend: backend,
-            input: Input::new(),
+            input: InputSystem::new(),
         }
     }
 
@@ -113,7 +113,7 @@ impl<G: Game> Engine<G> {
         }
 
         self.last_update = Some(dt);
-        self.input.update();
+        // self.input.update();
 
         self.render();
     }
@@ -166,7 +166,7 @@ impl<G: Game> ApplicationHandler for Engine<G> {
 
         // initialize game after renderer is created
         if let Some(renderer) = self.renderer.as_mut() {
-            self.game.on_init(renderer);
+            self.game.on_init(renderer, &mut self.input);
         }
     }
 
@@ -180,32 +180,22 @@ impl<G: Game> ApplicationHandler for Engine<G> {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            WindowEvent::KeyboardInput {
-                event: key_event, ..
-            } => self.input.handle_keyboard_event(&key_event),
+            WindowEvent::KeyboardInput { .. }
+            | WindowEvent::CursorMoved { .. }
+            | WindowEvent::MouseWheel { .. }
+            | WindowEvent::MouseInput { .. } => {
+                info!("Input event sent");
+                self.input.handle_winit_event(&event)
+            }
 
             WindowEvent::RedrawRequested => {
+                info!("Window redrawing....");
                 self.run_game_loop();
 
                 self.window.as_ref().unwrap().request_redraw();
+                info!("Window has requested redraw...");
             }
 
-            WindowEvent::CursorMoved { position, .. } => {
-                self.input.handle_cursor_moved_event(position.x, position.y)
-            }
-
-            WindowEvent::MouseWheel { delta, .. } => {
-                let d = match delta {
-                    winit::event::MouseScrollDelta::LineDelta(_, y) => y,
-                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 100.0,
-                    _ => 0.0,
-                };
-                self.input.handle_mouse_wheel_event(d as f64)
-            }
-
-            WindowEvent::MouseInput { state, button, .. } => {
-                self.input.handle_mouse_button_event(button, state);
-            }
             _ => (),
         }
     }
