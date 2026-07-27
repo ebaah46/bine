@@ -54,6 +54,10 @@ impl InputSource for Mouse {
                     _ => 0.0,
                 };
                 self.scroll_delta += d;
+                ctx.buffer.inject_axes_event(
+                    UniversalAxes::MouseScrollMovement,
+                    self.scroll_delta as f32,
+                );
             }
             winit::event::WindowEvent::MouseInput { state, button, .. } => {
                 let key = super::input::UniversalKey::Mouse(*button);
