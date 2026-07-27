@@ -17,7 +17,7 @@ use wgpu::{
     wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
 };
 
-use super::{DrawModel, Model, Texture, Vertex};
+use super::{DrawModel, Model, Vertex};
 use crate::{
     core::resources,
     renderer::{
@@ -474,7 +474,6 @@ impl Renderer {
         // should be moved to separate renderer method.
         // Update the light
         //
-        println!("Light rotating");
         if let (Some(light_uniform), Some(light_buffer)) =
             (self.light_uniform.as_mut(), &self.light_buffer)
         {
