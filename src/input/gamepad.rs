@@ -8,12 +8,11 @@ use gilrs::{
     EventType::{ButtonPressed, ButtonReleased, Connected, Disconnected},
     GamepadId, Gilrs,
 };
-use log::info;
 
 use crate::input::input::{InputSource, UnifiedInputEvent, UniversalAxes};
 #[derive(Debug)]
 pub struct Gamepad {
-    active_gamepad: Option<GamepadId>,
+    pub active_gamepad: Option<GamepadId>,
     lib: Option<Gilrs>,
     // This is to avoid stick drift causing bad player experience
     deadzone: f32,
