@@ -66,6 +66,7 @@ pub struct Engine<G: Game> {
     // timing details
     last_update: Option<Instant>,
     accumulator: f32,
+    pub fps: f64,
 }
 
 // === Engine Impl
@@ -86,6 +87,7 @@ impl<G: Game> Engine<G> {
             accumulator: 0.0,
             backend: backend,
             input: InputSystem::new(),
+            fps: 0.0,
         }
     }
 
@@ -93,12 +95,22 @@ impl<G: Game> Engine<G> {
         // calculate delta time as time since last frame processing began
         let dt = Instant::now();
         let frame_time = if let Some(last_update) = self.last_update {
-            (dt - last_update).as_secs_f32().min(Self::FRAME_TIME_CAP)
+            dt.duration_since(last_update)
+                .as_secs_f32()
+                .min(Self::FRAME_TIME_CAP)
         } else {
             0.0
         };
+
+        if frame_time > 0.0 {
+            self.fps = 1.0 / frame_time as f64
+        }
         self.accumulator += frame_time;
 
+        // capture inputs from connected devices
+        // could be moved into game logic update
+        self.input.update_frame_tick();
+        log::info!("FPS: {}", self.fps);
         // update game logic since last update
         let mut iterations = 0;
         while self.accumulator >= Self::TIME_STEP {
@@ -111,9 +123,8 @@ impl<G: Game> Engine<G> {
                 break;
             }
         }
-
+        self.input.input_buffer.post_update();
         self.last_update = Some(dt);
-        // self.input.update();
 
         self.render();
     }
@@ -183,17 +194,12 @@ impl<G: Game> ApplicationHandler for Engine<G> {
             WindowEvent::KeyboardInput { .. }
             | WindowEvent::CursorMoved { .. }
             | WindowEvent::MouseWheel { .. }
-            | WindowEvent::MouseInput { .. } => {
-                info!("Input event sent");
-                self.input.handle_winit_event(&event)
-            }
+            | WindowEvent::MouseInput { .. } => self.input.handle_winit_event(&event),
 
             WindowEvent::RedrawRequested => {
-                info!("Window redrawing....");
                 self.run_game_loop();
 
                 self.window.as_ref().unwrap().request_redraw();
-                info!("Window has requested redraw...");
             }
 
             _ => (),
