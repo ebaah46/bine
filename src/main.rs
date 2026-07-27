@@ -1,10 +1,14 @@
+use std::sync::{Arc, RwLock};
+
 use bine::{
     core::{Engine, Game},
-    renderer::{Camera, ModelVertex, Renderer, RendererBackends, Vertex},
+    input::{Gamepad, InputSystem, Keyboard, Mouse, UniversalAxes},
+    renderer::{Camera, Renderer, RendererBackends},
     window::WindowConfig,
 };
 
-use cgmath::{self, InnerSpace, Point3, Rad, Vector3, num_traits::Float};
+use cgmath::{self, InnerSpace, Point3, Vector3, num_traits::Float};
+use log::info;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 const WINDOW_WIDTH: u32 = 1980;
@@ -13,9 +17,21 @@ const ASPECT_RATIO: f32 = (WINDOW_WIDTH / WINDOW_HEIGHT) as f32;
 
 struct DemoGame {
     camera_controller: CameraController,
+    gamepad: Option<Arc<RwLock<Gamepad>>>,
 }
 impl Game for DemoGame {
-    fn on_init(&mut self, renderer: &mut Renderer) {
+    fn on_init(&mut self, renderer: &mut Renderer, input: &mut InputSystem) {
+        // setting supported devices
+        let source = Arc::new(RwLock::new(Mouse::default()));
+        input.add_source(source);
+        let source = Arc::new(RwLock::new(Keyboard::default()));
+        input.add_source(source);
+
+        let gamepad_raw = Gamepad::default();
+        let gamepad = Arc::new(RwLock::new(gamepad_raw));
+        self.gamepad = Some(gamepad.clone());
+        input.add_source(gamepad);
+
         let model_paths = vec!["assets/models/cube/cube.obj"];
         renderer
             .set_models_to_load(&model_paths)
@@ -34,12 +50,41 @@ impl Game for DemoGame {
         renderer.set_light_properties(&Self::LIGHT_POS, &Self::LIGHT_COLOR);
     }
 
-    fn on_update(&mut self, dt: f32, input: &bine::input::Input) {
-        if let Some((position_delta, scroll_delta)) =
-            input.mouse_position_delta().zip(input.mouse_scroll_delta())
-        {
-            self.camera_controller
-                .process_mouse(position_delta, scroll_delta);
+    fn on_update(&mut self, dt: f32, input: &bine::input::InputSystem) {
+        let snapshot = input.input_buffer.generate_snapshot();
+
+        info!("snapshot axes size:{}", snapshot.axes_moved.len());
+
+        // we need a mechanism to determine prefered controller
+        // but for now, if gamepad is not connected, we will default to keyboard on mouse
+        if let Some(gamepad_arc) = self.gamepad.as_ref() {
+            if let Ok(gamepad_lock) = gamepad_arc.read() {
+                if let Some((movement, _)) = gamepad_lock.active_gamepad.and_then(|id| {
+                    self.camera_controller.sensitivity = Self::GAMEPAD_SENSITIVITY;
+                    let x = snapshot.axes_moved(UniversalAxes::GamepadRightStickX(id))?;
+                    let y = snapshot.axes_moved(UniversalAxes::GamepadRightStickY(id))?;
+                    Some(((x, y), id))
+                }) {
+                    info!(
+                        "controlling camera with gamepad:({},{})",
+                        movement.0, movement.1
+                    );
+                    self.camera_controller.process_gamepad(movement);
+                }
+            }
+        } else {
+            if let Some(mouse_pos) = snapshot
+                .axes_moved(bine::input::UniversalAxes::MouseMovementX)
+                .zip(snapshot.axes_moved(UniversalAxes::MouseMovementY))
+            {
+                let scroll_delta = {
+                    snapshot
+                        .axes_moved(UniversalAxes::MouseScrollMovement)
+                        .unwrap_or_default()
+                };
+                self.camera_controller
+                    .process_mouse(mouse_pos, Some(scroll_delta));
+            }
         }
     }
 
@@ -54,16 +99,21 @@ impl DemoGame {
 
     const LIGHT_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
 
+    const GAMEPAD_SENSITIVITY: f32 = 0.5;
+    const MOUSE_SENSITIVITY: f32 = 0.0001;
+
     fn new() -> Self {
-        Self {
+        let instance = Self {
             camera_controller: CameraController::new(
-                0.005,
+                Self::MOUSE_SENSITIVITY,
                 f32::atan2(0.0, 2.0),
                 (1.0 / Vector3::new(0.0, 1.0, 2.0).magnitude()).asin(),
                 Vector3::new(0.0, 1.0, 2.0).magnitude(),
                 (0.0, 0.0, 0.0),
             ),
-        }
+            gamepad: None,
+        };
+        instance
     }
 }
 
@@ -90,14 +140,24 @@ impl CameraController {
         }
     }
 
-    fn process_mouse(&mut self, position_delta: (f64, f64), scroll_delta: f32) {
+    fn process_mouse(&mut self, position_delta: (f32, f32), scroll_delta: Option<f32>) {
         self.yaw += position_delta.0 as f32 * self.sensitivity;
 
         self.pitch -= position_delta.1 as f32 * self.sensitivity;
         self.pitch = self.pitch.clamp(-Self::PITCH_MAX, Self::PITCH_MAX);
-
-        self.radius -= scroll_delta * self.sensitivity;
+        if let Some(scroll) = scroll_delta {
+            self.radius -= scroll * self.sensitivity;
+        }
         self.radius = self.radius.clamp(Self::RADIUS_MIN, Self::RADIUS_MAX);
+    }
+
+    // This is how the game uses the gamepad rightsick to controll the camera
+    fn process_gamepad(&mut self, position_delta: (f32, f32)) {
+        self.yaw += position_delta.0 as f32 * self.sensitivity;
+
+        self.pitch -= position_delta.1 as f32 * self.sensitivity;
+        self.pitch = self.pitch.clamp(-Self::PITCH_MAX, Self::PITCH_MAX);
+        self.radius -= self.sensitivity;
     }
 
     fn process_keys() {}
