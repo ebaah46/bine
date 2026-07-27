@@ -8,6 +8,7 @@ use gilrs::{
     EventType::{ButtonPressed, ButtonReleased, Connected, Disconnected},
     GamepadId, Gilrs,
 };
+use log::info;
 
 use crate::input::input::{InputSource, UnifiedInputEvent, UniversalAxes};
 #[derive(Debug)]
@@ -108,7 +109,7 @@ impl InputSource for Gamepad {
             };
 
             let left_x: f32 = {
-                let raw_x = gamepad.value(gilrs::Axis::LeftStickX).abs();
+                let raw_x = gamepad.value(gilrs::Axis::LeftStickX);
                 if raw_x > self.deadzone {
                     raw_x
                 } else {
@@ -118,7 +119,7 @@ impl InputSource for Gamepad {
             ctx.buffer
                 .inject_axes_event(UniversalAxes::GamepadLeftStickX(id), left_x);
             let left_y: f32 = {
-                let raw_y = gamepad.value(gilrs::Axis::LeftStickY).abs();
+                let raw_y = gamepad.value(gilrs::Axis::LeftStickY);
                 if raw_y > self.deadzone {
                     raw_y
                 } else {
@@ -128,7 +129,7 @@ impl InputSource for Gamepad {
             ctx.buffer
                 .inject_axes_event(UniversalAxes::GamepadLeftStickY(id), left_y);
             let right_x: f32 = {
-                let raw_x = gamepad.value(gilrs::Axis::RightStickX).abs();
+                let raw_x = gamepad.value(gilrs::Axis::RightStickX);
                 if raw_x > self.deadzone {
                     raw_x
                 } else {
@@ -138,7 +139,7 @@ impl InputSource for Gamepad {
             ctx.buffer
                 .inject_axes_event(UniversalAxes::GamepadRightStickX(id), right_x);
             let right_y: f32 = {
-                let raw_y = gamepad.value(gilrs::Axis::RightStickY).abs();
+                let raw_y = gamepad.value(gilrs::Axis::RightStickY);
                 if raw_y > self.deadzone {
                     raw_y
                 } else {
