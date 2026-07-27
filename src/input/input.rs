@@ -10,6 +10,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use log::info;
+
 // === Input
 pub struct InputSystem {
     pub input_buffer: InputBuffer,
@@ -81,6 +83,7 @@ pub enum UniversalKey {
 pub enum UniversalAxes {
     MouseMovementX,
     MouseMovementY,
+    MouseScrollMovement,
     GamepadLeftStickX(gilrs::GamepadId),
     GamepadLeftStickY(gilrs::GamepadId),
     GamepadRightStickX(gilrs::GamepadId),
@@ -122,13 +125,13 @@ impl InputBuffer {
     // Generate snapshot that will be used by game to process player actions during each
     // frame.
     pub fn generate_snapshot(&self) -> InputSnapshot {
-        let keys_pressed = self
+        let keys_pressed: HashSet<UniversalKey> = self
             .current_frame_buffer
             .difference(&self.previous_frame_buffer)
             .cloned()
             .collect();
 
-        let keys_released = self
+        let keys_released: HashSet<UniversalKey> = self
             .previous_frame_buffer
             .difference(&self.current_frame_buffer)
             .cloned()
