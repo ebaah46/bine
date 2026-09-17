@@ -422,7 +422,7 @@ impl<'a> Renderer<'a> {
         znear: f32,
         zfar: f32,
     ) {
-        let camera = Camera::new(eye, target, up, aspect, fovy, znear, zfar);
+        let camera = Camera::new_perspective(eye, target, up, aspect, fovy, znear, zfar);
 
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
