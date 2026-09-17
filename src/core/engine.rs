@@ -49,10 +49,10 @@ pub trait Game {
 
 // === Engine struct
 //
-pub struct Engine<G: Game> {
+pub struct Engine<'a, G: Game> {
     // main resources
+    renderer: Option<Renderer<'a>>,
     window: Option<Window>,
-    renderer: Option<Renderer>,
     game: G, // game object
 
     // config settings for window
@@ -73,7 +73,7 @@ pub struct Engine<G: Game> {
 // Has engine constructor and helper methods for running
 // game engine.
 //
-impl<G: Game> Engine<G> {
+impl<'a, G: Game> Engine<'a, G> {
     const FRAME_TIME_CAP: f32 = 0.25; //
     const TIME_STEP: f32 = 1.0 / 60.0; // how often should I update game logic
 
@@ -148,7 +148,7 @@ impl<G: Game> Engine<G> {
 }
 
 // === winit ApplicationHandler for Engine
-impl<G: Game> ApplicationHandler for Engine<G> {
+impl<'a, G: Game> ApplicationHandler for Engine<'a, G> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         // create window
         match Window::create(&self.window_config, event_loop) {
@@ -161,18 +161,21 @@ impl<G: Game> ApplicationHandler for Engine<G> {
                 event_loop.exit();
             }
         }
-        // create renderer
-        if let Some(window) = &self.window {
-            self.renderer = pollster::block_on(async {
-                if let Ok(r) = Renderer::new(window.inner(), self.backend.clone()).await {
-                    Some(r)
-                } else {
-                    println!("Failed to create valid renderer");
-                    None
-                }
-            });
-        }
 
+        // create renderer
+        let window = self.window.as_ref().expect("Failed to obtain window for renderer creation");
+        let window_ref:&'a winit::window::Window  = unsafe{std::mem::transmute(window.inner())};
+        let backend = self.backend.clone();
+        let renderer = pollster::block_on(async move {
+            if let Ok(r) = Renderer::new(window_ref, backend).await {
+                Some(r)
+            } else {
+                println!("Failed to create valid renderer");
+                None
+            }
+        });
+
+        self.renderer = renderer;
         self.last_update = Some(Instant::now());
 
         // initialize game after renderer is created
