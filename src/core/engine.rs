@@ -204,6 +204,12 @@ impl<'a, G: Game> ApplicationHandler for Engine<'a, G> {
 
                 self.window.as_ref().unwrap().request_redraw();
             }
+            WindowEvent::Resized(new_size) => {
+
+                if let Some(mut renderer) = self.renderer.as_mut() {
+                    renderer.resize(new_size.width, new_size.height);
+                }
+            }
 
             _ => (),
         }
