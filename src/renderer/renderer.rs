@@ -28,10 +28,10 @@ use crate::{
 use winit::window::Window;
 
 // === Renderer Struct
-pub struct Renderer {
+pub struct Renderer<'a> {
     // wgpu specific internals
     instance: wgpu::Instance,
-    surface: wgpu::Surface<'static>,
+    surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -64,10 +64,10 @@ pub struct Renderer {
     instance_buffer: wgpu::Buffer,
 }
 
-impl Renderer {
+impl<'a> Renderer<'a> {
     //TODO: Builder pattern could be used to make this Renderer construction
     //      more idiomatic. But I do not have time for that now.
-    pub async fn new(window: &Window, backend: RendererBackends) -> Result<Self> {
+    pub async fn new(window: &'a Window, backend: RendererBackends) -> Result<Self> {
         let size = window.inner_size();
         let bd = match backend {
             RendererBackends::OpenGL => Backends::GL,
@@ -83,15 +83,7 @@ impl Renderer {
             ..Default::default()
         });
 
-        // ===
-        // This hack is to be investigated later
-        let surface = unsafe {
-            let target =
-                SurfaceTargetUnsafe::from_window(window).expect("Failed to create unsafe surface");
-            instance
-                .create_surface_unsafe(target)
-                .expect("failed to create unsafe surface with unsafe target")
-        };
+        let surface = instance.create_surface(window)?;
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
