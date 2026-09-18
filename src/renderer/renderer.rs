@@ -11,7 +11,7 @@ use wgpu::{
     Backends, Color, DeviceDescriptor, ExperimentalFeatures, Features, FragmentState, Instance,
     InstanceDescriptor, Limits, PipelineLayoutDescriptor, PowerPreference,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-    RequestAdapterOptions, SurfaceConfiguration, SurfaceTargetUnsafe, TextureUsages, Trace,
+    RequestAdapterOptions, SurfaceConfiguration, TextureUsages, Trace,
     VertexState, include_wgsl,
     util::DeviceExt,
     wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
@@ -22,7 +22,7 @@ use crate::{
     core::resources,
     renderer::{
         Camera, CameraUniform, Instance as RendererInstance, InstanceRaw, LightUniform,
-        ModelVertex, Texture as RendererTexture, model::DrawLight,
+        ModelVertex, Texture as RendererTexture, model::DrawLight, camera::Projection
     },
 };
 use winit::window::Window;
@@ -417,12 +417,15 @@ impl<'a> Renderer<'a> {
         eye: Point3<f32>,
         target: Point3<f32>,
         up: Vector3<f32>,
-        aspect: f32,
-        fovy: f32,
-        znear: f32,
-        zfar: f32,
+        projection: Projection,
     ) {
-        let camera = Camera::new_perspective(eye, target, up, aspect, fovy, znear, zfar);
+        let camera = match projection {
+            Projection::Perspective(a, f, n, z) => Camera::new_perspective(eye, target, up, a, f, n, z),
+            Projection::Orthographic(l, r, b, t, n, f) => Camera::new_orthographic(
+                (eye.x, eye.y).into(),
+                l,r,b,t,n,f
+            )
+        };
 
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);

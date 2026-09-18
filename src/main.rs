@@ -10,6 +10,7 @@ use bine::{
 use cgmath::{self, InnerSpace, Point3, Vector3, num_traits::Float};
 use log::info;
 use winit::event_loop::{ControlFlow, EventLoop};
+use bine::renderer::camera::Projection;
 
 const WINDOW_WIDTH: u32 = 1980;
 const WINDOW_HEIGHT: u32 = 1680;
@@ -37,14 +38,16 @@ impl Game for DemoGame {
             .set_models_to_load(&model_paths)
             .expect("Failed to load models");
 
+
+        // ASPECT_RATIO,
+        //             45.0,
+        //             0.1,
+        //             100.0,
         renderer.set_camera(
             (0.0, 1.0, 2.0).into(),
             (0.0, 0.0, 0.0).into(),
             Vector3::unit_y(),
-            ASPECT_RATIO,
-            45.0,
-            0.1,
-            100.0,
+            Projection::Orthographic(-3.0,3.0, -3.0, 3.0, -10.0, 10.0)
         );
 
         renderer.set_light_properties(&Self::LIGHT_POS, &Self::LIGHT_COLOR);
@@ -168,14 +171,33 @@ impl CameraController {
             self.target.y + self.radius * self.pitch.sin(),
             self.target.z + self.radius * self.pitch.cos() * self.yaw.cos(),
         );
-        Camera::new(
-            eye.into(),
-            self.target.clone(),
-            Vector3::unit_y(),
-            ASPECT_RATIO,
-            45.0,
-            0.1,
+
+        // 3D Camera projection use
+        // Camera::new_perspective(
+        //     eye.into(),
+        //     self.target.clone(),
+        //     Vector3::unit_y(),
+        //     ASPECT_RATIO,
+        //     45.0,
+        //     0.1,
+        //     100.0,
+        // )
+
+        // 2D camera projection view
+
+        // Use a zoom factor based on radius, with aspect ratio
+        let zoom = self.radius.max(1.0);  // random scale used here
+        let half_height = zoom;
+        let half_width = zoom * ASPECT_RATIO;
+        Camera::new_orthographic(
+            (eye.0, eye.1).into(),
+            self.target.x - half_width,
+            self.target.x + half_width,
+            self.target.y - half_height,
+            self.target.y + half_height,
+            -100.0,
             100.0,
+
         )
     }
 }
