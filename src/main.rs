@@ -209,8 +209,6 @@ fn main() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    event_loop.set_control_flow(ControlFlow::Wait);
-
     let config = WindowConfig {
         title: "Demo Game".into(),
         width: WINDOW_WIDTH,
